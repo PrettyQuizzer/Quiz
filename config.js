@@ -5,6 +5,7 @@ window.APP_CONFIG = {
   AUTHORITY: 'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_acveeSnQD',
   SCOPE: 'openid email profile',
   POST_LOGOUT_URI: "https://prettyquizzer.github.io/Quiz/",
+  INSTITUTIONS_API : 'https://yawptms26h.execute-api.us-east-2.amazonaws.com/prod/institutions',
   AWS_DOMAIN: 'https://us-east-2_acveeSnQD.auth.us-east-2.amazoncognito.com',
   REGION:        'us-east-2',                 // your AWS region
   USER_POOL_ID:  'us-east-2_acveeSnQD',       // your Cognito User Pool
