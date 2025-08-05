@@ -36,6 +36,8 @@
       border: none;
       color: white;
     }
+    #signinInstitution { background: #17a2b8; }
+    #signinInstitution:hover { background: #117a8b; }
     #signinTeacher { background: #0069d9; }
     #signinTeacher:hover { background: #0053a6; }
     #signinStudent { background: #28a745; }
@@ -52,6 +54,7 @@
     </select>
 
     <h2>Who are you?</h2>
+    <button id="signinInstitution">Institution Admin</button>
     <button id="signinTeacher">I’m a Teacher</button>
     <button id="signinStudent">I’m a Student</button>
 
@@ -70,7 +73,6 @@
       SCOPE
     } = window.APP_CONFIG;
 
-    // 1) configure oidc-client
     const mgr = new Oidc.UserManager({
       authority:                AUTHORITY,
       client_id:                CLIENT_ID,
@@ -78,46 +80,45 @@
       post_logout_redirect_uri: POST_LOGOUT_URI,
       response_type:            'code',
       scope:                    SCOPE,
-      // PKCE (S256) is on by default for code flow
     });
 
-    // 2) fetch & populate institutions dropdown
     async function loadInstitutions() {
       const res = await fetch('https://yawptms26h.execute-api.us-east-2.amazonaws.com/prod/institutions');
       if (!res.ok) throw new Error('Could not load institutions');
-      const insts = await res.json();
-      const sel = document.getElementById('institutionSelect');
-      sel.innerHTML = '<option value="">-- choose an institution --</option>';
-      insts.forEach(i => {
-        const o = document.createElement('option');
-        o.value = i.id;
-        o.textContent = i.name;
-        sel.appendChild(o);
-      });
+      return res.json();
     }
+
+    let insts;
     try {
-      await loadInstitutions();
+      insts = await loadInstitutions();
     } catch (e) {
       document.getElementById('error').textContent = e.message;
       return;
     }
+    const sel = document.getElementById('institutionSelect');
+    sel.innerHTML = '<option value="">-- choose an institution --</option>';
+    insts.forEach(i => {
+      const o = document.createElement('option');
+      o.value = i.id;
+      o.textContent = i.name;
+      sel.appendChild(o);
+    });
 
-    // 3) handle OAuth2 callback
+    // OAuth callback & existing user logic unchanged...
     if (window.location.search.includes('code=')) {
       try {
         const user = await mgr.signinRedirectCallback();
-        // store tokens & state
         sessionStorage.setItem('id_token',      user.id_token);
         sessionStorage.setItem('access_token',  user.access_token);
         sessionStorage.setItem('refresh_token', user.refresh_token);
         sessionStorage.setItem('institutionId', user.state.institutionId);
         sessionStorage.setItem('role',          user.state.role);
-
-        // redirect to the right dashboard
         if (user.state.role === 'teacher') {
           window.location = 'Admin/dashboard.html';
-        } else {
+        } else if (user.state.role === 'student') {
           window.location = 'Client/dashboard.html';
+        } else {
+          window.location = 'Institution/dashboard.html';
         }
         return;
       } catch (err) {
@@ -126,28 +127,33 @@
       }
     }
 
-    // 4) if already signed in, forward immediately
     const existingUser = await mgr.getUser();
     if (existingUser) {
       const role = existingUser.state?.role || sessionStorage.getItem('role');
       if (role === 'teacher') {
         window.location = 'Admin/dashboard.html';
-      } else {
+      } else if (role === 'student') {
         window.location = 'Client/dashboard.html';
+      } else {
+        window.location = 'Institution/dashboard.html';
       }
       return;
     }
 
-    // 5) show the login UI
     document.getElementById('login').style.display = 'block';
+    document.getElementById('signinInstitution').onclick = () => {
+      const inst = sel.value;
+      if (!inst) { alert('Please pick an institution first'); return; }
+      window.location = 'institutionlogin.html?inst=' + encodeURIComponent(inst);
+    };
     document.getElementById('signinTeacher').onclick = () => {
-      const inst = document.getElementById('institutionSelect').value;
+      const inst = sel.value;
       if (!inst) { alert('Please pick an institution first'); return; }
       sessionStorage.setItem('institutionId', inst);
       mgr.signinRedirect({ state: { institutionId: inst, role: 'teacher' } });
     };
     document.getElementById('signinStudent').onclick = () => {
-      const inst = document.getElementById('institutionSelect').value;
+      const inst = sel.value;
       if (!inst) { alert('Please pick an institution first'); return; }
       sessionStorage.setItem('institutionId', inst);
       mgr.signinRedirect({ state: { institutionId: inst, role: 'student' } });
