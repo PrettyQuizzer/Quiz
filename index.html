@@ -144,7 +144,7 @@
     document.getElementById('signinInstitution').onclick = () => {
       const inst = sel.value;
       if (!inst) { alert('Please pick an institution first'); return; }
-      window.location = 'institutionlogin.html?inst=' + encodeURIComponent(inst);
+      window.location = 'institution/login.html?inst=' + encodeURIComponent(inst);
     };
     document.getElementById('signinTeacher').onclick = () => {
       const inst = sel.value;

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>PrettyQuizzer – Institution Sign Up</title>
+  <style>
+    body { 
+      margin:0; font-family:sans-serif; 
+      background:#f0f2f5; display:flex;
+      align-items:center; justify-content:center;
+      height:100vh;
+    }
+    #signup {
+      background:white; padding:2rem;
+      border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);
+      width:320px; text-align:center;
+    }
+    input, button {
+      width:100%; margin-top:.75rem;
+      padding:.75rem; font-size:1rem;
+      border:1px solid #ccc; border-radius:4px;
+    }
+    button {
+      cursor:pointer; border:none; background:#17a2b8;
+      color:white;
+    }
+    button:hover { background:#117a8b }
+    .error { color:#d00; margin-top:1rem }
+  </style>
+</head>
+<body>
+  <div id="signup">
+    <h2>Institution Sign Up</h2>
+    <form id="signupForm">
+      <input id="instName"   name="instName"   type="text"     placeholder="Institution Name" required />
+      <input id="email"      name="email"      type="email"    placeholder="Email"            required />
+      <input id="password"   name="password"   type="password" placeholder="Password"         required />
+      <button type="submit">Sign Up</button>
+    </form>
+    <div id="error" class="error"></div>
+  </div>
+
+  <!-- your config.js must define COGNITO_CONFIG and (optionally) INSTITUTIONS_API -->
+  <script src="../config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@5.2.7/dist/amazon-cognito-identity.min.js"></script>
+  <script>
+    (function(){
+      const { region, userPoolId, clientId, INSTITUTIONS_API } = window.COGNITO_CONFIG;
+      // fallback to your API Gateway URL if not in config
+      const API_URL = INSTITUTIONS_API 
+        || 'https://yawptms26h.execute-api.us-east-2.amazonaws.com/prod/institutions';
+
+      AmazonCognitoIdentity.config.region = region;
+      const pool = new AmazonCognitoIdentity.CognitoUserPool({
+        UserPoolId: userPoolId,
+        ClientId:   clientId
+      });
+
+      document.getElementById("signupForm").onsubmit = async e => {
+        e.preventDefault();
+        document.getElementById("error").textContent = "";
+
+        const name  = e.target.instName.value.trim();
+        const email = e.target.email.value.trim();
+        const pwd   = e.target.password.value;
+
+        if (!name || !email || !pwd) {
+          document.getElementById("error").textContent = "All fields are required.";
+          return;
+        }
+
+        // build Cognito attribute list
+        const attrs = [
+          new AmazonCognitoIdentity.CognitoUserAttribute({
+            Name:  "name",
+            Value: name
+          }),
+          new AmazonCognitoIdentity.CognitoUserAttribute({
+            Name:  "custom:role",
+            Value: "institution"
+          })
+        ];
+
+        // 1) Sign up user in Cognito
+        pool.signUp(email, pwd, attrs, null, async (err, result) => {
+          if (err) {
+            document.getElementById("error").textContent = err.message || JSON.stringify(err);
+            return;
+          }
+          // 2) On success—create institution record in your backend
+          try {
+            const res = await fetch(API_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name:         name,
+                contactEmail: email
+              })
+            });
+            if (!res.ok) {
+              const text = await res.text();
+              throw new Error(text || "Failed to create institution");
+            }
+            alert("Institution created! You can now log in.");
+            window.location = "index.html";
+          } catch (apiErr) {
+            document.getElementById("error").textContent = apiErr.message;
+          }
+        });
+      };
+    })();
+  </script>
+</body>
+</html>
