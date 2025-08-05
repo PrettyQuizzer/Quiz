@@ -34,9 +34,9 @@
   <div id="signup">
     <h2>Institution Sign Up</h2>
     <form id="signupForm">
-      <input id="instName"       name="instName"       type="text"     placeholder="Institution Name" required />
-      <input id="email"          name="email"          type="email"    placeholder="Email"            required />
-      <input id="password"       name="password"       type="password" placeholder="Password"         required />
+      <input id="instName"        name="instName"        type="text"     placeholder="Institution Name" required />
+      <input id="email"           name="email"           type="email"    placeholder="Email"            required />
+      <input id="password"        name="password"        type="password" placeholder="Password"         required />
       <input id="confirmPassword" name="confirmPassword" type="password" placeholder="Confirm Password" required />
       <button type="submit">Sign Up</button>
     </form>
@@ -47,26 +47,23 @@
   <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@5.2.7/dist/amazon-cognito-identity.min.js"></script>
   <script>
     (function(){
-      // pull your Cognito & API settings from config.js
       const {
-        REGION,
-        USER_POOL_ID,
-        CLIENT_ID,
+        REGION,         // us-east-2
+        USER_POOL_ID,   // us-east-2_acveeSnQD
+        CLIENT_ID,      // 28kigssmjf2mdhjn6iavt1ua7e
         INSTITUTIONS_API
       } = window.APP_CONFIG || {};
 
-      if (!REGION || !USER_POOL_ID || !CLIENT_ID) {
+      if (!USER_POOL_ID || !CLIENT_ID) {
         document.getElementById('error').textContent =
-          "Configuration error: missing Cognito settings.";
+          "Missing Cognito configuration. Check config.js.";
         return;
       }
 
-      // fallback if someone didn't set INSTITUTIONS_API
       const API_URL = INSTITUTIONS_API
         || 'https://yawptms26h.execute-api.us-east-2.amazonaws.com/prod/institutions';
 
-      // initialize the Cognito SDK
-      AmazonCognitoIdentity.config.region = REGION;
+      // No region assignment here!
       const pool = new AmazonCognitoIdentity.CognitoUserPool({
         UserPoolId: USER_POOL_ID,
         ClientId:   CLIENT_ID
@@ -76,12 +73,11 @@
         e.preventDefault();
         document.getElementById("error").textContent = "";
 
-        const name           = e.target.instName.value.trim();
-        const email          = e.target.email.value.trim();
-        const password       = e.target.password.value;
-        const confirmPass    = e.target.confirmPassword.value;
+        const name        = e.target.instName.value.trim();
+        const email       = e.target.email.value.trim();
+        const password    = e.target.password.value;
+        const confirmPass = e.target.confirmPassword.value;
 
-        // basic validation
         if (!name || !email || !password || !confirmPass) {
           document.getElementById("error").textContent = "All fields are required.";
           return;
@@ -91,38 +87,30 @@
           return;
         }
 
-        // build Cognito attribute list
         const attrs = [
-          new AmazonCognitoIdentity.CognitoUserAttribute({
-            Name:  "name",
-            Value: name
-          }),
-          new AmazonCognitoIdentity.CognitoUserAttribute({
-            Name:  "custom:role",
-            Value: "institution"
-          })
+          new AmazonCognitoIdentity.CognitoUserAttribute({ Name:"name", Value:name }),
+          new AmazonCognitoIdentity.CognitoUserAttribute({ Name:"custom:role", Value:"institution" })
         ];
 
-        // 1) Sign up user in Cognito
         pool.signUp(email, password, attrs, null, async (err, result) => {
           if (err) {
             document.getElementById("error").textContent = err.message || JSON.stringify(err);
             return;
           }
 
-          // 2) On success—create institution record in your backend
+          // now call your Create-Institution Lambda
           try {
             const res = await fetch(API_URL, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type":"application/json" },
               body: JSON.stringify({
                 name:         name,
                 contactEmail: email
               })
             });
             if (!res.ok) {
-              const text = await res.text();
-              throw new Error(text || "Failed to create institution");
+              const txt = await res.text();
+              throw new Error(txt || "Failed to create institution record");
             }
             alert("Institution created! You can now log in.");
             window.location = "index.html";
