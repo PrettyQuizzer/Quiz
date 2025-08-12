@@ -5,101 +5,69 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>PrettyQuizzer – Institution Login</title>
   <style>
-    body { margin:0; font-family:sans-serif; background:#f0f2f5;
-           height:100vh; display:flex; align-items:center; justify-content:center; }
-    .card { background:#fff; width:360px; padding:2rem; border-radius:10px;
-            box-shadow:0 2px 10px rgba(0,0,0,.08); text-align:center; }
-    button { width:100%; padding:.8rem; margin-top:1rem; border:none; color:#fff;
-             background:#17a2b8; border-radius:6px; font-size:1rem; cursor:pointer; }
-    button[disabled]{opacity:.6; cursor:not-allowed;}
-    button:hover { background:#117a8b; }
-    .err { color:#c00; margin-top:1rem; word-break:break-word; }
-    .muted { color:#666; font-size:.9rem; }
-    code { background:#f3f3f3; padding:.1rem .3rem; border-radius:4px; }
+    body{margin:0;font-family:sans-serif;background:#f0f2f5;height:100vh;display:flex;align-items:center;justify-content:center}
+    .card{background:#fff;width:360px;padding:2rem;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08);text-align:center}
+    button{width:100%;padding:.8rem;margin-top:1rem;border:none;color:#fff;background:#17a2b8;border-radius:6px;font-size:1rem;cursor:pointer}
+    button[disabled]{opacity:.6;cursor:not-allowed}
+    button:hover{background:#117a8b}
+    .err{color:#c00;margin-top:1rem;word-break:break-word}
+    .muted{color:#666;font-size:.9rem}
   </style>
 </head>
 <body>
   <div class="card">
     <h2>Institution Admin Login</h2>
-    <p class="muted" id="instLabel">Preparing…</p>
-    <button id="go" disabled>Sign in with Cognito</button>
+    <p id="instLabel" class="muted">Preparing…</p>
+    <button id="go" disabled>Sign in</button>
     <div id="err" class="err"></div>
   </div>
 
   <script src="../config.js"></script>
   <script src="https://unpkg.com/oidc-client/dist/oidc-client.min.js"></script>
   <script>
-    (async function () {
+    (async function(){
       const cfg = window.APP_CONFIG || {};
+      const params = new URLSearchParams(location.search);
+      const inst  = params.get('inst');
+
       const errEl = document.getElementById('err');
       const btn   = document.getElementById('go');
       const label = document.getElementById('instLabel');
 
-      // 1) read ?inst=...
-      const params = new URLSearchParams(location.search);
-      const inst = params.get('inst');
-      if (!inst) {
+      if (!inst){
         label.textContent = 'No institution selected.';
         errEl.textContent = 'Go back and choose an institution first.';
         return;
       }
       label.textContent = `Institution ID: ${inst}`;
 
-      // 2) choose authority strictly from AWS_DOMAIN (Hosted UI)
-      const AUTHORITY = (cfg.AWS_DOMAIN || '').trim();
-
-      // Safety checks to avoid the “pool id as domain” mistake
-      const looksLikePoolId = /us-[a-z-]+\d+_[A-Za-z0-9]+/.test(AUTHORITY);
-      const hasUnderscore   = AUTHORITY.includes('_');
-      const isCognitoIdp    = /cognito-idp\./.test(AUTHORITY);
-      const isHostedUiHost  = /\.auth\.[\w-]+\.amazoncognito\.com$/.test(AUTHORITY);
-
-      if (!AUTHORITY) {
-        errEl.textContent = 'Missing AWS_DOMAIN in config.js (Hosted UI domain).';
-        return;
-      }
-      if (!isHostedUiHost || isCognitoIdp || hasUnderscore || looksLikePoolId) {
-        errEl.innerHTML =
-          'AWS_DOMAIN is not a valid Hosted UI domain. Set it to something like ' +
-          '<code>https://yourprefix.auth.us-east-2.amazoncognito.com</code> (from Cognito → App integration → Domain name).';
-        return;
-      }
-
-      // 3) preflight fetch the OIDC metadata for a clearer error if domain is wrong
-      try {
-        const wellKnown = AUTHORITY.replace(/\/+$/,'') + '/.well-known/openid-configuration';
-        const r = await fetch(wellKnown, { cache: 'no-store' });
-        if (!r.ok) throw new Error('Hosted UI domain is not responding with OIDC metadata.');
-      } catch (e) {
-        errEl.textContent = e.message + ' Check your domain prefix and region.';
-        return;
-      }
-
-      // 4) configure OIDC client
-      const mgr = new Oidc.UserManager({
-        authority:                AUTHORITY,                // Hosted UI domain
+      // Use the SAME authority style as your working pages
+      const oidcConfig = {
+        authority:                cfg.AUTHORITY,         // e.g. https://cognito-idp.us-east-2.amazonaws.com/us-east-2_acveeSnQD
         client_id:                cfg.CLIENT_ID,
-        redirect_uri:             cfg.REDIRECT_URI,
+        redirect_uri:             cfg.REDIRECT_URI,      // https://prettyquizzer.github.io/Quiz/
         post_logout_redirect_uri: cfg.POST_LOGOUT_URI,
         response_type:            'code',
-        scope:                    cfg.SCOPE
-      });
+        scope:                    cfg.SCOPE,
+        userStore:                new Oidc.WebStorageStateStore({ store: window.sessionStorage })
+      };
+      const mgr = new Oidc.UserManager(oidcConfig);
 
-      // Optional: already signed-in? bounce back
+      // If already signed in in this tab, bounce to your SPA to finish callback/routing
       try {
         const existing = await mgr.getUser();
-        if (existing && existing.id_token) {
+        if (existing && existing.id_token){
           sessionStorage.setItem('institutionId', inst);
-          window.location = '../index.html';
+          window.location = '../index.html';   // your SPA handles signinRedirectCallback()
           return;
         }
       } catch {}
 
-      // 5) start login on click, carrying state
+      // Start the Hosted UI login via the discovery from AUTHORITY (your working pattern)
       btn.disabled = false;
       btn.onclick = () => {
         mgr.signinRedirect({ state: { institutionId: inst, role: 'institution' } })
-          .catch(e => errEl.textContent = e && e.message ? e.message : String(e));
+           .catch(e => errEl.textContent = e?.message || String(e));
       };
     })();
   </script>
